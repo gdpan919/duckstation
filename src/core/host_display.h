@@ -52,6 +52,15 @@ public:
     RightOrBottom
   };
 
+  enum class Rotation
+  {
+    None,
+    R90Degrees,
+    R180Degrees,
+    R270Degrees,
+    Count
+  };
+
   virtual ~HostDisplay();
 
   ALWAYS_INLINE s32 GetWindowWidth() const { return static_cast<s32>(m_window_info.surface_width); }
@@ -182,6 +191,7 @@ public:
   virtual bool SetDisplayPixels(HostDisplayPixelFormat format, u32 width, u32 height, const void* buffer, u32 pitch);
 
   virtual bool GetHostRefreshRate(float* refresh_rate);
+  virtual bool SetDisplayRotation(Rotation rotation);
 
   void SetDisplayLinearFiltering(bool enabled) { m_display_linear_filtering = enabled; }
   void SetDisplayTopMargin(s32 height) { m_display_top_margin = height; }
@@ -260,6 +270,7 @@ protected:
 
   s32 m_display_top_margin = 0;
   Alignment m_display_alignment = Alignment::Center;
+  Rotation m_display_rotation = Rotation::None;
 
   std::unique_ptr<HostDisplayTexture> m_cursor_texture;
   float m_cursor_texture_scale = 1.0f;

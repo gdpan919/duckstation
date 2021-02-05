@@ -209,6 +209,8 @@ bool NoGUIHostInterface::CreateDisplay()
     return false;
   }
 
+  m_display->SetDisplayRotation(HostDisplay::Rotation::R90Degrees);
+
   if (!m_display->CreateImGuiContext() ||
       (m_fullscreen_ui_enabled && !FullscreenUI::Initialize(this, m_settings_interface.get())) ||
       !m_display->UpdateImGuiFontTexture())

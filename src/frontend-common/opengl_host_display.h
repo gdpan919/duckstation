@@ -48,6 +48,8 @@ public:
 
   virtual bool SetPostProcessingChain(const std::string_view& config) override;
 
+  bool SetDisplayRotation(Rotation rotation) override;
+
   std::unique_ptr<HostDisplayTexture> CreateTexture(u32 width, u32 height, u32 layers, u32 levels, u32 samples,
                                                     HostDisplayPixelFormat format, const void* data, u32 data_stride,
                                                     bool dynamic = false) override;
@@ -78,6 +80,8 @@ protected:
 
   void BindDisplayPixelsTexture();
   void UpdateDisplayPixelsTextureFilter();
+  void UpdateDisplayRotationFramebuffer();
+  void RenderRotatedFramebuffer();
 
   void RenderDisplay();
   void RenderImGui();
@@ -113,6 +117,9 @@ protected:
   std::unique_ptr<GL::StreamBuffer> m_display_pixels_texture_pbo;
   u32 m_display_pixels_texture_pbo_map_offset = 0;
   u32 m_display_pixels_texture_pbo_map_size = 0;
+
+  GLuint m_display_rotation_framebuffer_texture = 0;
+  GLuint m_display_rotation_framebuffer_fbo = 0;
 
   PostProcessingChain m_post_processing_chain;
   GL::Texture m_post_processing_input_texture;

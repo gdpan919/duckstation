@@ -91,6 +91,11 @@ bool HostDisplay::GetHostRefreshRate(float* refresh_rate)
   return g_host_interface->GetMainDisplayRefreshRate(refresh_rate);
 }
 
+bool HostDisplay::SetDisplayRotation(Rotation rotation)
+{
+  return false;
+}
+
 void HostDisplay::SetSoftwareCursor(std::unique_ptr<HostDisplayTexture> texture, float scale /*= 1.0f*/)
 {
   m_cursor_texture = std::move(texture);

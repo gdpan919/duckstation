@@ -40,6 +40,7 @@ public:
   void Destroy();
 
   int RegisterUniform(const char* name);
+  GLint GetUniformLocation(int index) const { return m_uniform_locations[index]; }
   void Uniform1ui(int index, u32 x) const;
   void Uniform2ui(int index, u32 x, u32 y) const;
   void Uniform3ui(int index, u32 x, u32 y, u32 z) const;
@@ -97,6 +98,6 @@ private:
   GLuint m_fragment_shader_id = 0;
 
   std::vector<GLint> m_uniform_locations;
-};
+}; // namespace GL
 
 } // namespace GL
