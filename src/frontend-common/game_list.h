@@ -1,4 +1,5 @@
 #pragma once
+#include "common/cd_image.h"
 #include "core/types.h"
 #include "game_settings.h"
 #include <memory>
@@ -8,7 +9,6 @@
 #include <unordered_map>
 #include <vector>
 
-class CDImage;
 class ByteStream;
 class ProgressCallback;
 
@@ -79,20 +79,13 @@ public:
   GameList();
   ~GameList();
 
-  /// Returns true if the filename is a PlayStation executable we can inject.
-  static bool IsExeFileName(const char* path);
-
-  /// Returns true if the filename is a Portable Sound Format file we can uncompress/load.
-  static bool IsPsfFileName(const char* path);
-
-  /// Returns true if the filename is a M3U Playlist we can handle.
-  static bool IsM3UFileName(const char* path);
-
   static const char* EntryTypeToString(GameListEntryType type);
   static const char* EntryCompatibilityRatingToString(GameListCompatibilityRating rating);
 
   /// Returns a string representation of a compatibility level.
   static const char* GetGameListCompatibilityRatingString(GameListCompatibilityRating rating);
+
+  static bool IsScannableFilename(const std::string& path);
 
   const EntryList& GetEntries() const { return m_entries; }
   const u32 GetEntryCount() const { return static_cast<u32>(m_entries.size()); }
@@ -114,6 +107,13 @@ public:
 
   void AddDirectory(std::string path, bool recursive);
   void Refresh(bool invalidate_cache, bool invalidate_database, ProgressCallback* progress = nullptr);
+
+  /// Manual scan.
+  void BeginRefresh(bool invalidate_cache, bool invalidate_database);
+  void ScanDirectory(const char* path, bool recursive, ProgressCallback* progress);
+  bool AddFileFromCache(const std::string& path, u64 timestamp);
+  bool ScanFile(std::string path);
+  void EndRefresh();
 
   void UpdateCompatibilityEntry(GameListCompatibilityEntry new_entry, bool save_to_list = true);
 
@@ -142,13 +142,12 @@ private:
 
   GameListEntry* GetMutableEntryForPath(const char* path);
 
-  static bool GetExeListEntry(const char* path, GameListEntry* entry);
-  static bool GetPsfListEntry(const char* path, GameListEntry* entry);
-  bool GetM3UListEntry(const char* path, GameListEntry* entry);
+  static bool GetExeListEntry(std::string path, std::FILE* fp, GameListEntry* entry);
+  static bool GetPsfListEntry(std::string path, std::FILE* fp, GameListEntry* entry);
+  bool GetM3UListEntry(std::string path, std::FILE* fp, GameListEntry* entry);
 
-  bool GetGameListEntry(const std::string& path, GameListEntry* entry);
+  bool GetGameListEntry(std::string path, std::FILE* fp, GameListEntry* entry);
   bool GetGameListEntryFromCache(const std::string& path, GameListEntry* entry);
-  void ScanDirectory(const char* path, bool recursive, ProgressCallback* progress);
 
   void LoadCache();
   bool LoadEntriesFromCache(ByteStream* stream);

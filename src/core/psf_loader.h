@@ -37,7 +37,7 @@ public:
   int GetTagInt(const char* tag_name, int default_value) const;
   float GetTagFloat(const char* tag_name, float default_value) const;
 
-  bool Load(const char* path);
+  bool Load(const char* path, const std::vector<u8>& file_data);
 
 private:
   enum : u32

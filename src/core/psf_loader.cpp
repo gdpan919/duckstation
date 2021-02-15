@@ -3,6 +3,7 @@
 #include "common/assert.h"
 #include "common/file_system.h"
 #include "common/log.h"
+#include "host_interface.h"
 #include "system.h"
 #include "zlib.h"
 #include <cctype>
@@ -57,27 +58,8 @@ float File::GetTagFloat(const char* tag_name, float default_value) const
   return GetTagFloat(tag_name).value_or(default_value);
 }
 
-bool File::Load(const char* path)
+bool File::Load(const char* path, const std::vector<u8>& file_data)
 {
-  auto fp = FileSystem::OpenManagedCFile(path, "rb");
-  if (!fp)
-  {
-    Log_ErrorPrintf("Failed to open PSF file '%s'", path);
-    return false;
-  }
-
-  // we could mmap this instead
-  std::fseek(fp.get(), 0, SEEK_END);
-  const u32 file_size = static_cast<u32>(std::ftell(fp.get()));
-  std::fseek(fp.get(), 0, SEEK_SET);
-
-  std::vector<u8> file_data(file_size);
-  if (std::fread(file_data.data(), 1, file_size, fp.get()) != file_size)
-  {
-    Log_ErrorPrintf("Failed to read data from PSF '%s'", path);
-    return false;
-  }
-
   const u8* file_pointer = file_data.data();
   const u8* file_pointer_end = file_data.data() + file_data.size();
 
@@ -86,7 +68,7 @@ bool File::Load(const char* path)
   file_pointer += sizeof(header);
   if (header.id[0] != 'P' || header.id[1] != 'S' || header.id[2] != 'F' || header.version != 0x01 ||
       header.compressed_program_size == 0 ||
-      (sizeof(header) + header.reserved_area_size + header.compressed_program_size) > file_size)
+      (sizeof(header) + header.reserved_area_size + header.compressed_program_size) > file_data.size())
   {
     Log_ErrorPrintf("Invalid or incompatible header in PSF '%s'", path);
     return false;
@@ -191,7 +173,23 @@ static bool LoadLibraryPSF(const char* path, bool use_pc_sp, u32 depth = 0)
   }
 
   File file;
-  if (!file.Load(path))
+
+  std::FILE* fp = g_host_interface->OpenFile(path, "rb");
+  if (!fp)
+  {
+    Log_ErrorPrintf("Failed to open PSF file '%s'", path);
+    return false;
+  }
+
+  std::optional<std::vector<u8>> file_data = FileSystem::ReadBinaryFile(fp);
+  std::fclose(fp);
+  if (!file_data.has_value())
+  {
+    Log_ErrorPrintf("Failed to read data from PSF '%s'", path);
+    return false;
+  }
+
+  if (!file.Load(path, file_data.value()))
   {
     Log_ErrorPrintf("Failed to load main PSF '%s'", path);
     return false;

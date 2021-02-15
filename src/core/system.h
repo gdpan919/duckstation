@@ -66,6 +66,9 @@ bool IsPsfFileName(const char* path);
 /// Returns true if the filename is a M3U Playlist we can handle.
 bool IsM3UFileName(const char* path);
 
+/// Returns true if the filename is one we can load.
+bool IsLoadableFilename(const char* path);
+
 /// Parses an M3U playlist, returning the entries.
 std::vector<std::string> ParseM3UFile(const char* path);
 
@@ -80,7 +83,6 @@ DiscRegion GetRegionForImage(CDImage* cdi);
 DiscRegion GetRegionForExe(const char* path);
 DiscRegion GetRegionForPsf(const char* path);
 std::optional<DiscRegion> GetRegionForPath(const char* image_path);
-std::string_view GetTitleForPath(const char* path);
 
 State GetState();
 void SetState(State new_state);

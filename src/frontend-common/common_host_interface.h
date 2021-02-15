@@ -260,6 +260,10 @@ public:
   /// This is the APK for Android builds, or the program directory for standalone builds.
   virtual std::unique_ptr<ByteStream> OpenPackageFile(const char* path, u32 flags) override;
 
+  /// Opens a file provided by the user.
+  /// This will usually be a full path, but for Android it may be a content URI.
+  virtual std::FILE* OpenFile(const char* path, const char* mode) override;
+
   /// Controller navigation, used by fullscreen mode. Returns true if the UI consumed the event, and it should not
   /// execute the normal handler.
   bool SetControllerNavigationButtonState(FrontendCommon::ControllerNavigationButton button, bool pressed);

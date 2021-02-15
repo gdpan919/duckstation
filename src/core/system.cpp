@@ -7,6 +7,7 @@
 #include "common/file_system.h"
 #include "common/iso_reader.h"
 #include "common/log.h"
+#include "common/make_array.h"
 #include "common/state_wrapper.h"
 #include "common/string_util.h"
 #include "common/timestamp.h"
@@ -279,8 +280,35 @@ bool IsM3UFileName(const char* path)
   return (extension && StringUtil::Strcasecmp(extension, ".m3u") == 0);
 }
 
+bool IsLoadableFilename(const char* path)
+{
+  static constexpr auto extensions = make_array(".bin", ".cue", ".img", ".iso", ".chd", // discs
+                                                ".exe", ".psexe",                       // exes
+                                                ".psf", ".minipsf",                     // psf
+                                                ".m3u"                                  // playlists
+  );
+  const char* extension = std::strrchr(path, '.');
+  if (!extension)
+    return false;
+
+  for (const char* test_extension : extensions)
+  {
+    if (StringUtil::Strcasecmp(extension, test_extension) == 0)
+      return true;
+  }
+
+  return false;
+}
+
+// Used for opening CD images to redirect to content resolver on Android.
+static std::FILE* OpenChildImageFileCallback(const char* parent_name, const char* filename, const char* mode)
+{
+  return g_host_interface->OpenFile(filename, mode);
+}
+
 std::vector<std::string> ParseM3UFile(const char* path)
 {
+  // TODO: FIXME FOR CONTENT URIS
   std::ifstream ifs(path);
   if (!ifs.is_open())
   {
@@ -342,18 +370,9 @@ ConsoleRegion GetConsoleRegionForDiscRegion(DiscRegion region)
   }
 }
 
-std::string_view GetTitleForPath(const char* path)
-{
-  std::string_view path_view = path;
-  std::size_t title_start = path_view.find_last_of("/\\");
-  if (title_start != std::string_view::npos)
-    path_view.remove_prefix(title_start + 1);
-  return path_view.substr(0, path_view.find_last_of('.'));
-}
-
 std::string GetGameCodeForPath(const char* image_path)
 {
-  std::unique_ptr<CDImage> cdi = CDImage::Open(image_path);
+  std::unique_ptr<CDImage> cdi = CDImage::Open(image_path, nullptr, OpenChildImageFileCallback);
   if (!cdi)
     return {};
 
@@ -511,21 +530,34 @@ DiscRegion GetRegionForImage(CDImage* cdi)
 
 DiscRegion GetRegionForExe(const char* path)
 {
-  auto fp = FileSystem::OpenManagedCFile(path, "rb");
+  std::FILE* fp = g_host_interface->OpenFile(path, "rb");
   if (!fp)
     return DiscRegion::Other;
 
   BIOS::PSEXEHeader header;
-  if (std::fread(&header, sizeof(header), 1, fp.get()) != 1)
+  if (std::fread(&header, sizeof(header), 1, fp) != 1)
+  {
+    std::fclose(fp);
     return DiscRegion::Other;
+  }
 
+  std::fclose(fp);
   return BIOS::GetPSExeDiscRegion(header);
 }
 
 DiscRegion GetRegionForPsf(const char* path)
 {
+  std::FILE* fp = g_host_interface->OpenFile(path, "rb");
+  if (!fp)
+    return DiscRegion::Other;
+
+  std::optional<std::vector<u8>> file_data(FileSystem::ReadBinaryFile(fp));
+  std::fclose(fp);
+  if (!file_data.has_value())
+    return DiscRegion::Other;
+
   PSFLoader::File psf;
-  if (!psf.Load(path))
+  if (!psf.Load(path, file_data.value()))
     return DiscRegion::Other;
 
   return psf.GetRegion();
@@ -538,7 +570,7 @@ std::optional<DiscRegion> GetRegionForPath(const char* image_path)
   else if (IsPsfFileName(image_path))
     return GetRegionForPsf(image_path);
 
-  std::unique_ptr<CDImage> cdi = CDImage::Open(image_path);
+  std::unique_ptr<CDImage> cdi = CDImage::Open(image_path, nullptr, OpenChildImageFileCallback);
   if (!cdi)
     return {};
 
@@ -585,7 +617,7 @@ bool RecreateGPU(GPURenderer renderer, bool update_display /* = true*/)
 
 std::unique_ptr<CDImage> OpenCDImage(const char* path, bool force_preload)
 {
-  std::unique_ptr<CDImage> media = CDImage::Open(path);
+  std::unique_ptr<CDImage> media = CDImage::Open(path, nullptr, OpenChildImageFileCallback);
   if (!media)
     return {};
 
@@ -1697,7 +1729,7 @@ void UpdateMemoryCards()
       {
         if (!s_media_playlist_filename.empty() && g_settings.memory_card_use_playlist_title)
         {
-          const std::string playlist_title(GetTitleForPath(s_media_playlist_filename.c_str()));
+          const std::string playlist_title(FileSystem::GetFileTitleFromPath(s_media_playlist_filename));
           card = MemoryCard::Open(g_host_interface->GetGameMemoryCardPath(playlist_title.c_str(), i));
         }
         else if (s_running_game_title.empty())
