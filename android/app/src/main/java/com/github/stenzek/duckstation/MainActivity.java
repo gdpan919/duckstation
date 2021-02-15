@@ -186,6 +186,7 @@ public class MainActivity extends AppCompatActivity {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addCategory(Intent.CATEGORY_DEFAULT);
         i.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+        i.setFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(Intent.createChooser(i, getString(R.string.main_activity_choose_directory)),
                 REQUEST_ADD_DIRECTORY_TO_GAME_LIST);
     }
@@ -252,11 +253,9 @@ public class MainActivity extends AppCompatActivity {
                 if (resultCode != RESULT_OK)
                     return;
 
-                String path = GameDirectoriesActivity.getPathFromTreeUri(this, data.getData());
-                if (path == null)
-                    return;
-
-                GameDirectoriesActivity.addSearchDirectory(this, path, true);
+                final Uri uri = data.getData();
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                GameDirectoriesActivity.addSearchDirectory(this, uri.toString(), true);
                 mGameList.refresh(false, false, this);
             }
             break;

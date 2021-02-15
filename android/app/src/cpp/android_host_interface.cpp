@@ -39,6 +39,7 @@ static jfieldID s_AndroidHostInterface_field_mNativePointer;
 static jmethodID s_AndroidHostInterface_method_reportError;
 static jmethodID s_AndroidHostInterface_method_reportMessage;
 static jmethodID s_AndroidHostInterface_method_openAssetStream;
+static jmethodID s_AndroidHostInterface_method_openURIAsFileDescriptor;
 static jclass s_EmulationActivity_class;
 static jmethodID s_EmulationActivity_method_reportError;
 static jmethodID s_EmulationActivity_method_onEmulationStarted;
@@ -230,6 +231,66 @@ std::unique_ptr<ByteStream> AndroidHostInterface::OpenPackageFile(const char* pa
   std::unique_ptr<ByteStream> ret(AndroidHelpers::ReadInputStreamToMemory(env, stream, 65536));
   env->DeleteLocalRef(stream);
   return ret;
+}
+
+std::FILE* AndroidHostInterface::OpenFile(const char* path, const char* mode)
+{
+  // only direct URIs to the java side, that way relative or working directory paths aren't slow/broken
+  if (strncasecmp(path, "content://", 10) != 0 && strncasecmp(path, "file://", 7) != 0)
+  {
+    return CommonHostInterface::OpenFile(path, mode);
+  }
+
+  // translate C modes to Java modes
+  TinyString mode_trimmed;
+  std::size_t mode_len = std::strlen(mode);
+  for (size_t i = 0; i < mode_len; i++)
+  {
+    if (mode[i] == 'r' || mode[i] == 'w' || mode[i] == '+')
+      mode_trimmed.AppendCharacter(mode[i]);
+  }
+
+  // TODO: Handle append mode by seeking to end.
+  const char* java_mode = nullptr;
+  if (mode_trimmed == "r")
+    java_mode = "r";
+  else if (mode_trimmed == "r+")
+    java_mode = "rw";
+  else if (mode_trimmed == "w")
+    java_mode = "w";
+  else if (mode_trimmed == "w+")
+    java_mode = "rwt";
+
+  if (!java_mode)
+  {
+    Log_ErrorPrintf("Could not translate file mode '%s' ('%s')", mode, mode_trimmed.GetCharArray());
+    return nullptr;
+  }
+
+  // Hand off to Java...
+  JNIEnv* env = AndroidHelpers::GetJNIEnv();
+  LocalRefHolder<jstring> path_jstr(env, env->NewStringUTF(path));
+  LocalRefHolder<jstring> mode_jstr(env, env->NewStringUTF(java_mode));
+  int fd = env->CallIntMethod(m_java_object, s_AndroidHostInterface_method_openURIAsFileDescriptor, path_jstr.Get(),
+                              mode_jstr.Get());
+
+  // Just in case...
+  if (env->ExceptionCheck())
+  {
+    env->ExceptionClear();
+    return nullptr;
+  }
+
+  // Convert to a C file object.
+  std::FILE* fp = fdopen(fd, mode);
+  if (!fp)
+  {
+    Log_ErrorPrintf("Failed to convert FD %d to C FILE for '%s'.", fd, path);
+    close(fd);
+    return nullptr;
+  }
+
+  return fp;
 }
 
 void AndroidHostInterface::RegisterHotkeys()
@@ -921,6 +982,9 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* reserved)
          env->GetMethodID(s_AndroidHostInterface_class, "reportMessage", "(Ljava/lang/String;)V")) == nullptr ||
       (s_AndroidHostInterface_method_openAssetStream = env->GetMethodID(
          s_AndroidHostInterface_class, "openAssetStream", "(Ljava/lang/String;)Ljava/io/InputStream;")) == nullptr ||
+      (s_AndroidHostInterface_method_openURIAsFileDescriptor =
+         env->GetMethodID(s_AndroidHostInterface_class, "openURIAsFileDescriptor",
+                          "(Ljava/lang/String;Ljava/lang/String;)I")) == nullptr ||
       (emulation_activity_class = env->FindClass("com/github/stenzek/duckstation/EmulationActivity")) == nullptr ||
       (s_EmulationActivity_class = static_cast<jclass>(env->NewGlobalRef(emulation_activity_class))) == nullptr ||
       (s_EmulationActivity_method_reportError =
@@ -938,10 +1002,10 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* reserved)
       (s_EmulationActivity_method_openPauseMenu = env->GetMethodID(emulation_activity_class, "openPauseMenu", "()V")) ==
         nullptr ||
       (s_PatchCode_constructor = env->GetMethodID(s_PatchCode_class, "<init>", "(ILjava/lang/String;Z)V")) == nullptr ||
-      (s_GameListEntry_constructor = env->GetMethodID(
-         s_GameListEntry_class, "<init>",
-         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/"
-         "String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V")) == nullptr ||
+      (s_GameListEntry_constructor =
+         env->GetMethodID(s_GameListEntry_class, "<init>",
+                          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/"
+                          "String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V")) == nullptr ||
       (s_SaveStateInfo_constructor = env->GetMethodID(
          s_SaveStateInfo_class, "<init>",
          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZII[B)V")) ==
@@ -1191,6 +1255,36 @@ DEFINE_JNI_ARGS_METHOD(jboolean, AndroidHostInterface_saveInputProfile, jobject 
   return hi->SaveInputProfile(AndroidHelpers::JStringToString(env, name).c_str());
 }
 
+DEFINE_JNI_ARGS_METHOD(void, AndroidHostInterface_beginGameListRefresh, jobject obj, jboolean invalidate_cache,
+                       jboolean invalidate_database)
+{
+  AndroidHelpers::GetNativeClass(env, obj)->GetGameList()->BeginRefresh(invalidate_database, invalidate_cache);
+}
+
+DEFINE_JNI_ARGS_METHOD(jboolean, AndroidHostInterface_isScannableGameListFilename, jobject obj, jstring filename)
+{
+  const std::string filename_str(AndroidHelpers::JStringToString(env, filename));
+  return GameList::IsScannableFilename(filename_str);
+}
+
+DEFINE_JNI_ARGS_METHOD(jboolean, AndroidHostInterface_scanGameListFile, jobject obj, jstring filename,
+                       jlong modification_time)
+{
+  std::string filename_str(AndroidHelpers::JStringToString(env, filename));
+  const u64 unix_modification_time = static_cast<u64>(modification_time / 1000);
+  GameList* gl = AndroidHelpers::GetNativeClass(env, obj)->GetGameList();
+  if (gl->AddFileFromCache(filename_str, unix_modification_time))
+    return true;
+
+  return gl->ScanFile(std::move(filename_str));
+}
+
+DEFINE_JNI_ARGS_METHOD(void, AndroidHostInterface_endGameListRefresh, jobject obj, jboolean invalidate_cache,
+                       jboolean invalidate_database)
+{
+  AndroidHelpers::GetNativeClass(env, obj)->GetGameList()->EndRefresh();
+}
+
 DEFINE_JNI_ARGS_METHOD(void, AndroidHostInterface_refreshGameList, jobject obj, jboolean invalidate_cache,
                        jboolean invalidate_database, jobject progress_callback)
 {
@@ -1208,13 +1302,11 @@ static jobject CreateGameListEntry(JNIEnv* env, AndroidHostInterface* hi, const 
 {
   const Timestamp modified_ts(
     Timestamp::FromUnixTimestamp(static_cast<Timestamp::UnixTimestampValue>(entry.last_modified_time)));
-  const std::string file_title_str(System::GetTitleForPath(entry.path.c_str()));
   const std::string cover_path_str(hi->GetGameList()->GetCoverImagePathForEntry(&entry));
 
   jstring path = env->NewStringUTF(entry.path.c_str());
   jstring code = env->NewStringUTF(entry.code.c_str());
   jstring title = env->NewStringUTF(entry.title.c_str());
-  jstring file_title = env->NewStringUTF(file_title_str.c_str());
   jstring region = env->NewStringUTF(DiscRegionToString(entry.region));
   jstring type = env->NewStringUTF(GameList::EntryTypeToString(entry.type));
   jstring compatibility_rating =
@@ -1223,9 +1315,8 @@ static jobject CreateGameListEntry(JNIEnv* env, AndroidHostInterface* hi, const 
   jstring modified_time = env->NewStringUTF(modified_ts.ToString("%Y/%m/%d, %H:%M:%S"));
   jlong size = entry.total_size;
 
-  jobject entry_jobject =
-    env->NewObject(s_GameListEntry_class, s_GameListEntry_constructor, path, code, title, file_title, size,
-                   modified_time, region, type, compatibility_rating, cover_path);
+  jobject entry_jobject = env->NewObject(s_GameListEntry_class, s_GameListEntry_constructor, path, code, title, size,
+                                         modified_time, region, type, compatibility_rating, cover_path);
 
   env->DeleteLocalRef(modified_time);
   if (cover_path)
@@ -1233,7 +1324,6 @@ static jobject CreateGameListEntry(JNIEnv* env, AndroidHostInterface* hi, const 
   env->DeleteLocalRef(compatibility_rating);
   env->DeleteLocalRef(type);
   env->DeleteLocalRef(region);
-  env->DeleteLocalRef(file_title);
   env->DeleteLocalRef(title);
   env->DeleteLocalRef(code);
   env->DeleteLocalRef(path);

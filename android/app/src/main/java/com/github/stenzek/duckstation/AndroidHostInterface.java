@@ -1,14 +1,18 @@
 package com.github.stenzek.duckstation;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
+import android.net.Uri;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.util.Log;
 import android.view.Surface;
 import android.widget.Toast;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
@@ -38,6 +42,19 @@ public class AndroidHostInterface {
             return mContext.getAssets().open(path, AssetManager.ACCESS_STREAMING);
         } catch (IOException e) {
             return null;
+        }
+    }
+
+    public int openURIAsFileDescriptor(String uriString, String mode) {
+        try {
+            final Uri uri = Uri.parse(uriString);
+            final ContentResolver resolver = mContext.getContentResolver();
+            final ParcelFileDescriptor fd = resolver.openFileDescriptor(uri, mode);
+            if (fd == null)
+                return -1;
+            return fd.detachFd();
+        } catch (Exception e) {
+            return -1;
         }
     }
 
@@ -94,7 +111,10 @@ public class AndroidHostInterface {
 
     public native HotkeyInfo[] getHotkeyInfoList();
 
-    public native void refreshGameList(boolean invalidateCache, boolean invalidateDatabase, AndroidProgressCallback progressCallback);
+    public native void beginGameListRefresh(boolean invalidateCache, boolean invalidateDatabase);
+    public native boolean isScannableGameListFilename(String filename);
+    public native void scanGameListFile(String filename, long modificationTime);
+    public native void endGameListRefresh();
 
     public native GameListEntry[] getGameListEntries();
 
