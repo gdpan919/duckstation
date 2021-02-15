@@ -15,7 +15,7 @@ public:
   CDImageCueSheet();
   ~CDImageCueSheet() override;
 
-  bool OpenAndParse(const char* filename);
+  bool OpenAndParse(const char* filename, std::FILE* existing_file, OpenChildImageCallback child_callback);
 
   bool ReadSubChannelQ(SubChannelQ* subq) override;
   bool HasNonStandardSubchannel() const override;
@@ -45,12 +45,28 @@ CDImageCueSheet::~CDImageCueSheet()
   cd_delete(m_cd);
 }
 
-bool CDImageCueSheet::OpenAndParse(const char* filename)
+bool CDImageCueSheet::OpenAndParse(const char* filename, std::FILE* existing_file,
+                                   OpenChildImageCallback child_callback)
 {
-  std::optional<std::string> cuesheet_string = FileSystem::ReadFileToString(filename);
+  if (!existing_file)
+  {
+    if (child_callback)
+      existing_file = child_callback(filename, filename, "rb");
+    else
+      existing_file = FileSystem::OpenCFile(filename, "rb");
+
+    if (!existing_file)
+    {
+      Log_ErrorPrintf("Failed to open cuesheet '%s': errno %d", filename, errno);
+      return false;
+    }
+  }
+
+  std::optional<std::string> cuesheet_string(FileSystem::ReadFileToString(existing_file));
+  std::fclose(existing_file);
   if (!cuesheet_string.has_value())
   {
-    Log_ErrorPrintf("Failed to open cuesheet '%s': errno %d", filename, errno);
+    Log_ErrorPrintf("Failed to read cuesheet '%s': errno %d", filename, errno);
     return false;
   }
 
@@ -97,7 +113,11 @@ bool CDImageCueSheet::OpenAndParse(const char* filename)
     if (track_file_index == m_files.size())
     {
       const std::string track_full_filename(basepath + track_filename);
-      std::FILE* track_fp = FileSystem::OpenCFile(track_full_filename.c_str(), "rb");
+      std::FILE* track_fp;
+      if (child_callback)
+        track_fp = child_callback(filename, track_full_filename.c_str(), "rb");
+      else
+        track_fp = FileSystem::OpenCFile(track_full_filename.c_str(), "rb");
       if (!track_fp && track_file_index == 0)
       {
         // many users have bad cuesheets, or they're renamed the files without updating the cuesheet.
@@ -142,8 +162,8 @@ bool CDImageCueSheet::OpenAndParse(const char* filename)
       file_size /= track_sector_size;
       if (track_start >= file_size)
       {
-        Log_ErrorPrintf("Failed to open track %u in '%s': track start is out of range (%ld vs %ld)", track_num, filename,
-                        track_start, file_size);
+        Log_ErrorPrintf("Failed to open track %u in '%s': track start is out of range (%ld vs %ld)", track_num,
+                        filename, track_start, file_size);
         return false;
       }
 
@@ -291,10 +311,11 @@ bool CDImageCueSheet::ReadSectorFromIndex(void* buffer, const Index& index, LBA 
   return true;
 }
 
-std::unique_ptr<CDImage> CDImage::OpenCueSheetImage(const char* filename)
+std::unique_ptr<CDImage> CDImage::OpenCueSheetImage(const char* filename, std::FILE* existing_file /* = nullptr */,
+                                                    OpenChildImageCallback child_callback /* = nullptr */)
 {
   std::unique_ptr<CDImageCueSheet> image = std::make_unique<CDImageCueSheet>();
-  if (!image->OpenAndParse(filename))
+  if (!image->OpenAndParse(filename, existing_file, child_callback))
     return {};
 
   return image;

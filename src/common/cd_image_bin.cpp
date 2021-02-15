@@ -11,7 +11,7 @@ public:
   CDImageBin();
   ~CDImageBin() override;
 
-  bool Open(const char* filename);
+  bool Open(const char* filename, std::FILE* existing_file, OpenChildImageCallback child_callback);
 
   bool ReadSubChannelQ(SubChannelQ* subq) override;
   bool HasNonStandardSubchannel() const override;
@@ -34,14 +34,22 @@ CDImageBin::~CDImageBin()
     std::fclose(m_fp);
 }
 
-bool CDImageBin::Open(const char* filename)
+bool CDImageBin::Open(const char* filename, std::FILE* existing_file, OpenChildImageCallback child_callback)
 {
   m_filename = filename;
-  m_fp = FileSystem::OpenCFile(filename, "rb");
+  m_fp = existing_file;
   if (!m_fp)
   {
-    Log_ErrorPrintf("Failed to open binfile '%s': errno %d", filename, errno);
-    return false;
+    if (child_callback)
+      m_fp = child_callback(filename, filename, "rb");
+    else
+      m_fp = FileSystem::OpenCFile(filename, "rb");
+
+    if (!m_fp)
+    {
+      Log_ErrorPrintf("Failed to open binfile '%s': errno %d", filename, errno);
+      return false;
+    }
   }
 
   const u32 track_sector_size = RAW_SECTOR_SIZE;
@@ -130,10 +138,11 @@ bool CDImageBin::ReadSectorFromIndex(void* buffer, const Index& index, LBA lba_i
   return true;
 }
 
-std::unique_ptr<CDImage> CDImage::OpenBinImage(const char* filename)
+std::unique_ptr<CDImage> CDImage::OpenBinImage(const char* filename, std::FILE* existing_file /* = nullptr */,
+                                               OpenChildImageCallback child_callback /* = nullptr */)
 {
   std::unique_ptr<CDImageBin> image = std::make_unique<CDImageBin>();
-  if (!image->Open(filename))
+  if (!image->Open(filename, existing_file, child_callback))
     return {};
 
   return image;

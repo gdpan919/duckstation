@@ -14,12 +14,16 @@ u32 CDImage::GetBytesPerSector(TrackMode mode)
   return sizes[static_cast<u32>(mode)];
 }
 
-std::unique_ptr<CDImage> CDImage::Open(const char* filename)
+std::unique_ptr<CDImage> CDImage::Open(const char* filename, std::FILE* existing_file /* = nullptr */,
+                                       OpenChildImageCallback child_callback /* = nullptr */)
 {
   const char* extension = std::strrchr(filename, '.');
   if (!extension)
   {
     Log_ErrorPrintf("Invalid filename: '%s'", filename);
+    if (existing_file)
+      std::fclose(existing_file);
+
     return nullptr;
   }
 
@@ -31,21 +35,24 @@ std::unique_ptr<CDImage> CDImage::Open(const char* filename)
 
   if (CASE_COMPARE(extension, ".cue") == 0)
   {
-    return OpenCueSheetImage(filename);
+    return OpenCueSheetImage(filename, existing_file, child_callback);
   }
   else if (CASE_COMPARE(extension, ".bin") == 0 || CASE_COMPARE(extension, ".img") == 0 ||
            CASE_COMPARE(extension, ".iso") == 0)
   {
-    return OpenBinImage(filename);
+    return OpenBinImage(filename, existing_file, child_callback);
   }
   else if (CASE_COMPARE(extension, ".chd") == 0)
   {
-    return OpenCHDImage(filename);
+    return OpenCHDImage(filename, existing_file, child_callback);
   }
 
 #undef CASE_COMPARE
 
   Log_ErrorPrintf("Unknown extension '%s' from filename '%s'", extension, filename);
+  if (existing_file)
+    std::fclose(existing_file);
+
   return nullptr;
 }
 

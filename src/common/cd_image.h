@@ -191,10 +191,15 @@ public:
   static u32 GetBytesPerSector(TrackMode mode);
 
   // Opening disc image.
-  static std::unique_ptr<CDImage> Open(const char* filename);
-  static std::unique_ptr<CDImage> OpenBinImage(const char* filename);
-  static std::unique_ptr<CDImage> OpenCueSheetImage(const char* filename);
-  static std::unique_ptr<CDImage> OpenCHDImage(const char* filename);
+  using OpenChildImageCallback = std::FILE* (*)(const char* parent_name, const char* filename, const char* mode);
+  static std::unique_ptr<CDImage> Open(const char* filename, std::FILE* existing_file = nullptr,
+                                       OpenChildImageCallback child_callback = nullptr);
+  static std::unique_ptr<CDImage> OpenBinImage(const char* filename, std::FILE* existing_file = nullptr,
+                                               OpenChildImageCallback child_callback = nullptr);
+  static std::unique_ptr<CDImage> OpenCueSheetImage(const char* filename, std::FILE* existing_file = nullptr,
+                                                    OpenChildImageCallback child_callback = nullptr);
+  static std::unique_ptr<CDImage> OpenCHDImage(const char* filename, std::FILE* existing_file = nullptr,
+                                               OpenChildImageCallback child_callback = nullptr);
   static std::unique_ptr<CDImage>
   CreateMemoryImage(CDImage* image, ProgressCallback* progress = ProgressCallback::NullProgressCallback);
 

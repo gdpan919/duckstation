@@ -46,7 +46,7 @@ public:
   CDImageCHD();
   ~CDImageCHD() override;
 
-  bool Open(const char* filename);
+  bool Open(const char* filename, std::FILE* existing_file, OpenChildImageCallback child_callback);
 
   bool ReadSubChannelQ(SubChannelQ* subq) override;
   bool HasNonStandardSubchannel() const override;
@@ -84,14 +84,21 @@ CDImageCHD::~CDImageCHD()
     std::fclose(m_fp);
 }
 
-bool CDImageCHD::Open(const char* filename)
+bool CDImageCHD::Open(const char* filename, std::FILE* existing_file, OpenChildImageCallback child_callback)
 {
   Assert(!m_fp);
-  m_fp = FileSystem::OpenCFile(filename, "rb");
+  m_fp = existing_file;
   if (!m_fp)
   {
-    Log_ErrorPrintf("Failed to open CHD '%s': errno %d", filename, errno);
-    return false;
+    if (child_callback)
+      m_fp = child_callback(filename, filename, "rb");
+    else
+      m_fp = FileSystem::OpenCFile(filename, "rb");
+    if (!m_fp)
+    {
+      Log_ErrorPrintf("Failed to open CHD '%s': errno %d", filename, errno);
+      return false;
+    }
   }
 
   chd_error err = chd_open_file(m_fp, CHD_OPEN_READ, nullptr, &m_chd);
@@ -343,10 +350,11 @@ bool CDImageCHD::ReadHunk(u32 hunk_index)
   return true;
 }
 
-std::unique_ptr<CDImage> CDImage::OpenCHDImage(const char* filename)
+std::unique_ptr<CDImage> CDImage::OpenCHDImage(const char* filename, std::FILE* existing_file /* = nullptr */,
+                                               OpenChildImageCallback child_callback /* = nullptr */)
 {
   std::unique_ptr<CDImageCHD> image = std::make_unique<CDImageCHD>();
-  if (!image->Open(filename))
+  if (!image->Open(filename, existing_file, child_callback))
     return {};
 
   return image;
