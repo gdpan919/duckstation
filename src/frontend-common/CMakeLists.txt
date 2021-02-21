@@ -102,6 +102,13 @@ if(ENABLE_RETROACHIEVEMENTS)
       http_downloader_wininet.h
     )
   endif()
+
+  target_sources(frontend-common PRIVATE
+    cheevos.cpp
+    cheevos.h
+  )
+  target_compile_definitions(frontend-common PUBLIC -DWITH_CHEEVOS=1)
+  target_link_libraries(frontend-common PRIVATE rcheevos rapidjson)
 endif()
 
 # Copy the provided data directory to the output directory.

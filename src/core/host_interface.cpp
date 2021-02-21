@@ -591,6 +591,11 @@ void HostInterface::SetDefaultSettings(SettingsInterface& si)
   si.SetBoolValue("Logging", "LogToWindow", false);
   si.SetBoolValue("Logging", "LogToFile", false);
 
+  si.SetBoolValue("Cheevos", "Enabled", false);
+  si.SetBoolValue("Cheevos", "TestMode", false);
+  si.DeleteValue("Cheevos", "Username");
+  si.DeleteValue("Cheevos", "Token");
+
   si.SetBoolValue("Debug", "ShowVRAM", false);
   si.SetBoolValue("Debug", "DumpCPUToVRAMCopies", false);
   si.SetBoolValue("Debug", "DumpVRAMToCPUCopies", false);

@@ -258,6 +258,9 @@ void Settings::Load(SettingsInterface& si)
   log_to_window = si.GetBoolValue("Logging", "LogToWindow", false);
   log_to_file = si.GetBoolValue("Logging", "LogToFile", false);
 
+  cheevos_enabled = si.GetBoolValue("Cheevos", "Enabled", false);
+  cheevos_test_mode = si.GetBoolValue("Cheevos", "TestMode", false);
+
   debugging.show_vram = si.GetBoolValue("Debug", "ShowVRAM");
   debugging.dump_cpu_to_vram_copies = si.GetBoolValue("Debug", "DumpCPUToVRAMCopies");
   debugging.dump_vram_to_cpu_copies = si.GetBoolValue("Debug", "DumpVRAMToCPUCopies");
@@ -407,6 +410,9 @@ void Settings::Save(SettingsInterface& si) const
   si.SetBoolValue("Logging", "LogToDebug", log_to_debug);
   si.SetBoolValue("Logging", "LogToWindow", log_to_window);
   si.SetBoolValue("Logging", "LogToFile", log_to_file);
+
+  si.SetBoolValue("Cheevos", "Enabled", cheevos_enabled);
+  si.SetBoolValue("Cheevos", "TestMode", cheevos_test_mode);
 
   si.SetBoolValue("Debug", "ShowVRAM", debugging.show_vram);
   si.SetBoolValue("Debug", "DumpCPUToVRAMCopies", debugging.dump_cpu_to_vram_copies);

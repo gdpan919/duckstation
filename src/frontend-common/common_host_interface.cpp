@@ -43,6 +43,10 @@
 #include "discord_rpc.h"
 #endif
 
+#ifdef WITH_CHEEVOS
+#include "cheevos.h"
+#endif
+
 #ifdef WIN32
 #include "common/windows_headers.h"
 #include <KnownFolders.h>
@@ -89,6 +93,14 @@ bool CommonHostInterface::Initialize()
 
   CreateImGuiContext();
 
+#ifdef WITH_CHEEVOS
+  if (g_settings.cheevos_enabled)
+  {
+    if (!Cheevos::Initialize(this))
+      ReportError("Failed to initialize cheevos.");
+  }
+#endif
+
   return true;
 }
 
@@ -100,6 +112,10 @@ void CommonHostInterface::Shutdown()
 
 #ifdef WITH_DISCORD_PRESENCE
   ShutdownDiscordPresence();
+#endif
+
+#ifdef WITH_CHEEVOS
+  Cheevos::Shutdown();
 #endif
 
   if (m_controller_interface)
@@ -438,6 +454,11 @@ void CommonHostInterface::PollAndUpdate()
 {
 #ifdef WITH_DISCORD_PRESENCE
   PollDiscordPresence();
+#endif
+
+#ifdef WITH_CHEEVOS
+  if (Cheevos::IsActive())
+    Cheevos::Update();
 #endif
 }
 
@@ -920,6 +941,11 @@ void CommonHostInterface::OnRunningGameChanged(const std::string& path, CDImage*
 
 #ifdef WITH_DISCORD_PRESENCE
   UpdateDiscordPresence();
+#endif
+
+#ifdef WITH_CHEEVOS
+  if (Cheevos::IsActive())
+    Cheevos::GameChanged(path, image);
 #endif
 }
 
@@ -2574,6 +2600,19 @@ void CommonHostInterface::CheckForSettingsChanges(const Settings& old_settings)
                       g_settings.log_to_console, g_settings.log_to_debug, g_settings.log_to_window,
                       g_settings.log_to_file);
   }
+
+#ifdef WITH_CHEEVOS
+  if (g_settings.cheevos_enabled != old_settings.cheevos_enabled ||
+      g_settings.cheevos_test_mode != old_settings.cheevos_test_mode)
+  {
+    Cheevos::Shutdown();
+    if (g_settings.cheevos_enabled)
+    {
+      if (!Cheevos::Initialize(this))
+        ReportError("Failed to initialize cheevos after settings change.");
+    }
+  }
+#endif
 
   UpdateInputMap();
 }

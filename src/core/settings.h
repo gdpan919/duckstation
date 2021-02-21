@@ -166,6 +166,10 @@ struct Settings
   u32 gpu_fifo_size = 128;
   TickCount gpu_max_run_ahead = 128;
 
+  // cheevos
+  bool cheevos_enabled;
+  bool cheevos_test_mode;
+
   struct DebugSettings
   {
     bool show_vram = false;
